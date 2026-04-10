@@ -1,120 +1,90 @@
 import re
-from typing import Optional, Tuple
-from xml.etree import ElementTree as ET
+import json
 
-import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 BASE_URL = "https://www.mercadolivre.com.br/emissor/relatorios/api/document"
-REQUEST_TIMEOUT_SECONDS = 30
-
-
-def build_url(invoice_number: str) -> str:
-    return f"{BASE_URL}/{invoice_number}/xml"
 
 
 def normalize_invoice_number(value: str) -> str:
     return re.sub(r"\D", "", value or "")
 
 
-def validate_xml(content: bytes, content_type: str) -> Optional[str]:
-    if not content.strip():
-        return "A API retornou conteudo vazio."
+def parse_invoice_numbers(raw_value: str) -> list[str]:
+    tokens = re.split(r"[\n,;]+", raw_value or "")
+    normalized = [normalize_invoice_number(token) for token in tokens]
+    filtered = [item for item in normalized if item]
 
-    if "text/html" in (content_type or "").lower():
-        return "A resposta veio como HTML em vez de XML."
-
-    try:
-        root = ET.fromstring(content)
-    except ET.ParseError as exc:
-        return f"O arquivo retornado nao e um XML valido: {exc}"
-
-    root_tag = root.tag.lower()
-    if root_tag == "html" or root_tag.endswith("html"):
-        return "A resposta recebida e HTML, nao XML."
-
-    return None
+    unique_in_order: list[str] = []
+    seen = set()
+    for item in filtered:
+        if item not in seen:
+            unique_in_order.append(item)
+            seen.add(item)
+    return unique_in_order
 
 
-def build_response_diagnostics(response: requests.Response) -> str:
-    redirects = []
-    for item in response.history:
-        location = item.headers.get("Location", "sem Location")
-        redirects.append(f"{item.status_code}->{location}")
-
-    redirect_info = " | ".join(redirects) if redirects else "sem redirecionamento"
-    location_header = response.headers.get("Location", "nao informado")
-    content_type = response.headers.get("Content-Type", "nao informado")
-
-    return (
-        f"status_final={response.status_code}; "
-        f"url_final={response.url}; "
-        f"content_type={content_type}; "
-        f"location_header={location_header}; "
-        f"redirects={redirect_info}"
-    )
-
-
-def fetch_xml(invoice_number: str) -> Tuple[Optional[bytes], Optional[str]]:
-    url = build_url(invoice_number)
-    headers = {
-        "Accept": "application/xml, text/xml, */*",
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/126.0.0.0 Safari/537.36"
-        ),
-        "Referer": "https://www.mercadolivre.com.br/",
-    }
-
-    try:
-        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS)
-    except requests.RequestException as exc:
-        return None, f"Erro de conexao ao consultar a API: {exc}"
-
-    if response.status_code != 200:
-        diagnostics = build_response_diagnostics(response)
-        return (
-            None,
-            f"Nao foi possivel baixar a nota. URL original: {url}. Diagnostico: {diagnostics}",
-        )
-
-    xml_error = validate_xml(
-        content=response.content,
-        content_type=response.headers.get("Content-Type", ""),
-    )
-    if xml_error:
-        preview = response.text[:300].replace("\n", " ").strip()
-        diagnostics = build_response_diagnostics(response)
-        return None, f"{xml_error} Diagnostico: {diagnostics}. Trecho inicial: {preview}"
-
-    return response.content, None
+def build_download_url(invoice_number: str) -> str:
+    return f"{BASE_URL}/{invoice_number}/xml"
 
 
 st.set_page_config(page_title="Download XML NFe", layout="centered")
 st.title("Download XML de Nota Fiscal")
-st.write("Informe o numero da nota para baixar o XML.")
+st.write(
+    "Informe um ou varios numeros de nota e abra os links de download. "
+    "O XML sera autenticado pela sessao ja logada no navegador."
+)
 
-invoice_input = st.text_input("Numero da nota", placeholder="Ex.: 5845581252")
+invoice_input = st.text_area(
+    "Numeros das notas",
+    placeholder="Ex.: 5845581252, 5741995505, 5123456789",
+    help="Separe por virgula, ponto e virgula ou quebra de linha.",
+)
 
-if st.button("Baixar XML", type="primary"):
-    invoice_number = normalize_invoice_number(invoice_input)
-    if not invoice_number:
-        st.error("Informe um numero de nota valido (somente digitos).")
+if st.button("Gerar link de download", type="primary"):
+    invoice_numbers = parse_invoice_numbers(invoice_input)
+    if not invoice_numbers:
+        st.error("Informe ao menos um numero de nota valido (somente digitos).")
         st.stop()
 
-    with st.spinner("Consultando API..."):
-        xml_content, error = fetch_xml(invoice_number)
+    download_urls = [build_download_url(number) for number in invoice_numbers]
+    st.success(f"Foram gerados {len(download_urls)} links de download.")
 
-    if error:
-        st.error(error)
-    else:
-        st.success("XML obtido com sucesso.")
-        st.download_button(
-            label="Download do XML",
-            data=xml_content,
-            file_name=f"nfe_{invoice_number}.xml",
-            mime="application/xml",
-            type="primary",
-        )
+    urls_json = json.dumps(download_urls)
+    open_all_html = f"""
+    <div>
+      <button
+        onclick='openAllDownloads()'
+        style="
+          background:#0068c9;
+          color:white;
+          border:none;
+          border-radius:8px;
+          padding:10px 16px;
+          cursor:pointer;
+          font-weight:600;
+        "
+      >
+        Abrir download no Mercado Livre
+      </button>
+    </div>
+    <script>
+      const urls = {urls_json};
+      function openAllDownloads() {{
+        urls.forEach((url, index) => {{
+          setTimeout(() => window.open(url, "_blank"), index * 250);
+        }});
+      }}
+    </script>
+    """
+    components.html(open_all_html, height=70)
+
+    st.write("Links gerados:")
+    for number, url in zip(invoice_numbers, download_urls):
+        st.markdown(f"- Nota `{number}`: [Abrir link]({url})")
+
+    st.caption(
+        "Se o navegador bloquear pop-ups, permita pop-ups para esta pagina e clique novamente."
+    )
