@@ -1,11 +1,17 @@
 import re
 import json
+from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
 
 
 BASE_URL = "https://www.mercadolivre.com.br/emissor/relatorios/api/document"
+LOGO_CANDIDATE_PATHS = [
+    Path("C:/Users/RafaelMendesCarneiro/OneDrive - MARHGUS MOTOS LTDA/Imagens/logo v 1.png"),
+    Path("logo v 1.png"),
+    Path("assets/logo.png"),
+]
 
 
 def normalize_invoice_number(value: str) -> str:
@@ -30,8 +36,24 @@ def build_download_url(invoice_number: str) -> str:
     return f"{BASE_URL}/{invoice_number}/xml"
 
 
+def find_logo_path() -> Path | None:
+    for candidate in LOGO_CANDIDATE_PATHS:
+        if candidate.exists():
+            return candidate
+    return None
+
+
 st.set_page_config(page_title="Download XML NFe", layout="centered")
-st.title("Download XML de Nota Fiscal")
+
+logo_path = find_logo_path()
+if logo_path is not None:
+    col_left, col_center, col_right = st.columns([1, 2, 1])
+    with col_center:
+        st.image(str(logo_path), width=220)
+    st.markdown("## Download XML de Nota Fiscal")
+else:
+    st.title("Download XML de Nota Fiscal")
+
 st.write(
     "Informe um ou varios numeros de nota e abra os links de download. "
     "O XML sera autenticado pela sessao ja logada no navegador."
