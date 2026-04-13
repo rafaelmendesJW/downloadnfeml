@@ -8,8 +8,10 @@ import streamlit.components.v1 as components
 
 BASE_URL = "https://www.mercadolivre.com.br/emissor/relatorios/api/document"
 LOGO_CANDIDATE_PATHS = [
-    Path("C:/Users/RafaelMendesCarneiro/OneDrive - MARHGUS MOTOS LTDA/Imagens/logo v 1.png"),
     Path("logo v 1.png"),
+    Path("LOGO V2.jpeg"),
+    Path("LOGO 02-V1.png"),
+    Path("C:/Users/RafaelMendesCarneiro/OneDrive - MARHGUS MOTOS LTDA/Imagens/logo v 1.png"),
     Path("assets/logo.png"),
 ]
 
