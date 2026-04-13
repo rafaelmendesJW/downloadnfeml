@@ -1,5 +1,6 @@
 import re
 import json
+import base64
 from pathlib import Path
 
 import streamlit as st
@@ -7,12 +8,13 @@ import streamlit.components.v1 as components
 
 
 BASE_URL = "https://www.mercadolivre.com.br/emissor/relatorios/api/document"
-LOGO_CANDIDATE_PATHS = [
-    Path("logo v 1.png"),
-    Path("LOGO V2.jpeg"),
-    Path("LOGO 02-V1.png"),
-    Path("C:/Users/RafaelMendesCarneiro/OneDrive - MARHGUS MOTOS LTDA/Imagens/logo v 1.png"),
-    Path("assets/logo.png"),
+FEATURED_LOGO_CANDIDATE_PATHS = [
+    Path("assets/logo-baixa-xml-minimal-v2-preview-white.png"),
+]
+FLOATING_LOGO_CANDIDATE_PATHS = [
+    Path("logo v 1 transparente.png"),
+    Path("logo v 1 transparente.jpeg"),
+    Path("logo v 1 transparente.jpg"),
 ]
 
 
@@ -38,23 +40,62 @@ def build_download_url(invoice_number: str) -> str:
     return f"{BASE_URL}/{invoice_number}/xml"
 
 
-def find_logo_path() -> Path | None:
-    for candidate in LOGO_CANDIDATE_PATHS:
+def find_first_existing_path(candidates: list[Path]) -> Path | None:
+    for candidate in candidates:
         if candidate.exists():
             return candidate
     return None
 
 
+def to_data_uri(image_path: Path) -> str:
+    suffix = image_path.suffix.lower()
+    mime_by_suffix = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }
+    mime_type = mime_by_suffix.get(suffix, "application/octet-stream")
+    encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
+
+
 st.set_page_config(page_title="Download XML NFe", layout="centered")
 
-logo_path = find_logo_path()
-if logo_path is not None:
+featured_logo_path = find_first_existing_path(FEATURED_LOGO_CANDIDATE_PATHS)
+if featured_logo_path is not None:
     col_left, col_center, col_right = st.columns([1, 2, 1])
     with col_center:
-        st.image(str(logo_path), width=220)
-    st.markdown("## Download XML de Nota Fiscal")
-else:
-    st.title("Download XML de Nota Fiscal")
+        st.image(str(featured_logo_path), width=340)
+
+st.title("Download XML de Nota Fiscal")
+
+current_logo_path = find_first_existing_path(FLOATING_LOGO_CANDIDATE_PATHS)
+if current_logo_path is not None:
+    current_logo_data_uri = to_data_uri(current_logo_path)
+    st.markdown(
+        f"""
+        <style>
+          .logo-floating-bottom-left {{
+            position: fixed;
+            left: 18px;
+            bottom: 18px;
+            z-index: 9999;
+          }}
+          .logo-floating-bottom-left img {{
+            display: block;
+            width: 180px;
+            max-width: 32vw;
+            height: auto;
+          }}
+        </style>
+        <div class="logo-floating-bottom-left">
+          <img src="{current_logo_data_uri}" alt="Logo v1 transparente">
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 st.write(
     "Informe um ou varios numeros de nota e abra os links de download. "
